@@ -9,7 +9,7 @@ import (
 	"github.com/claudemuller/daytime/pkg/daytime"
 )
 
-const port = 13
+const port = 9999 // 13
 
 // TODO: implement thread pool
 
