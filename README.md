@@ -42,6 +42,5 @@ go test ./...
 
 ## TODO
 
-- manage connections with goroutine pool
 - add integration test for the servers
 - load tests
