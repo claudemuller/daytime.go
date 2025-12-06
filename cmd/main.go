@@ -67,7 +67,7 @@ func main() {
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			slog.Error("Error shutdowning down server", "error", err)
+			slog.Error("Error shutting down server", "error", err)
 		}
 	}
 }

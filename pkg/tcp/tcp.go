@@ -11,13 +11,16 @@ import (
 	"github.com/claudemuller/daytime/pkg/daytime"
 )
 
+const poolSize = 1000
+
 type TCPServer struct {
 	Host       string
 	Port       int
 	shutdownCh chan interface{}
+	connCh     chan net.Conn
 	wg         sync.WaitGroup
-	connMu     sync.Mutex
-	conns      map[net.Conn]interface{}
+	listener   net.Listener
+	listenerMu sync.Mutex
 }
 
 type Option func(*TCPServer)
@@ -41,7 +44,7 @@ func NewServer(options ...Option) *TCPServer {
 		Host:       "localhost",
 		Port:       13,
 		shutdownCh: make(chan interface{}),
-		conns:      make(map[net.Conn]interface{}),
+		connCh:     make(chan net.Conn, poolSize),
 	}
 	for _, option := range options {
 		option(&srv)
@@ -49,16 +52,85 @@ func NewServer(options ...Option) *TCPServer {
 	return &srv
 }
 
+func (s *TCPServer) Listen() error {
+	slog.Info("Listening for connections", "host", s.Host, "port", s.Port)
+
+	var err error
+
+	s.listener, err = net.Listen("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port))
+	if err != nil {
+		return fmt.Errorf("failed to listen for connections: %w", err)
+	}
+	defer s.listener.Close()
+
+	slog.Info("Setting up connection pool", "size", poolSize)
+	for i := range poolSize {
+		s.wg.Add(1)
+		go s.worker(i)
+	}
+
+	for {
+		conn, err := s.listener.Accept()
+		if err != nil {
+			select {
+			case <-s.shutdownCh:
+				slog.Info("Server shutting down, stop accepting connections")
+				close(s.connCh)
+				s.wg.Wait()
+				return nil
+
+			default:
+				slog.Error("Failed to accept connection", "remote", err)
+				continue
+			}
+		}
+
+		select {
+		case s.connCh <- conn:
+			slog.Info("Connection sent to worker", "remote", conn.RemoteAddr())
+
+		case <-s.shutdownCh:
+			conn.Close()
+			slog.Info("Server shutting down, rejected connection", "remote", conn.RemoteAddr())
+		}
+	}
+}
+
+func (s *TCPServer) worker(id int) {
+	defer s.wg.Done()
+
+	for conn := range s.connCh {
+		slog.Info("Worker handling connection", "worker", id, "remote", conn.RemoteAddr())
+		s.handle(conn)
+	}
+
+	slog.Info("Worker done", "id", id)
+}
+
+func (s *TCPServer) handle(conn net.Conn) {
+	defer conn.Close()
+
+	now := daytime.Get(time.Now)
+
+	n, err := conn.Write([]byte(now))
+	if err != nil {
+		slog.Error("Failed to send data", "error", err)
+	}
+	if n <= 0 {
+		slog.Error("Zero bytes sent", "error", err)
+	}
+
+	slog.Info("Successfully sent datetime", "bytes sent", n, "destination", conn.RemoteAddr())
+}
+
 func (s *TCPServer) Shutdown(ctx context.Context) error {
 	close(s.shutdownCh)
 
-	s.connMu.Lock()
+	s.listenerMu.Lock()
 	{
-		for conn := range s.conns {
-			conn.Close()
-		}
+		s.listener.Close()
 	}
-	s.connMu.Unlock()
+	s.listenerMu.Unlock()
 
 	doneCh := make(chan interface{})
 	go func() {
@@ -75,56 +147,4 @@ func (s *TCPServer) Shutdown(ctx context.Context) error {
 		slog.Warn("Shutdown timeout reached, closing open connections")
 		return ctx.Err()
 	}
-}
-
-func (s *TCPServer) Listen() error {
-	slog.Info("Listening for connections", "host", s.Host, "port", s.Port)
-
-	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port))
-	if err != nil {
-		return fmt.Errorf("failed to listen for connections: %w", err)
-	}
-	defer ln.Close()
-
-	for {
-		conn, err := ln.Accept()
-		if err != nil {
-			slog.Error("Failed to accept connection", "source", err)
-			continue
-		}
-
-		slog.Info("Accepted connection", "source", conn.RemoteAddr())
-
-		s.wg.Add(1)
-		s.connMu.Lock()
-		{
-			s.conns[conn] = struct{}{}
-		}
-		s.connMu.Unlock()
-		go s.handle(conn)
-	}
-}
-
-func (s *TCPServer) handle(conn net.Conn) {
-	defer func(c net.Conn) {
-		c.Close()
-		s.connMu.Lock()
-		{
-			delete(s.conns, c)
-		}
-		s.connMu.Unlock()
-		s.wg.Done()
-	}(conn)
-
-	now := daytime.Get(time.Now)
-
-	n, err := conn.Write([]byte(now))
-	if err != nil {
-		slog.Error("Failed to send data", "error", err)
-	}
-	if n <= 0 {
-		slog.Error("Zero bytes sent", "error", err)
-	}
-
-	slog.Info("Successfully sent datetime", "bytes sent", n, "destination", conn.RemoteAddr())
 }
