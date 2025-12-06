@@ -16,7 +16,12 @@ go mod tidy
 
 ## Run
 
-If no `--proto` is specified then TCP is assumed.
+### Flags
+
+| Flag | Type | Default | Note |
+|---|---|---|---|
+| `--proto` | `string` | `tcp` | |
+| `--port` | `int` | `13` | Elevated privileges are required to run on port `13` |
 
 ```bash
 go run cmd/main.go [--proto=[tcp/udp]]
@@ -36,4 +41,11 @@ go test ./...
 
 ## TODO
 
+- add port flag
+    - add args table
+- create and return "server"
+    - handle control sequences
+    - a way to stop server
 - manage connections with goroutine pool
+- add integration test for the servers
+
