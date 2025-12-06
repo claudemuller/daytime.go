@@ -16,8 +16,10 @@ go mod tidy
 
 ## Run
 
+If no `--proto` is specified then TCP is assumed.
+
 ```bash
-go run cmd/main.go
+go run cmd/main.go [--proto=[tcp/udp]]
 ```
 
 ## Build
