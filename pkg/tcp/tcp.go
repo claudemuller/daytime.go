@@ -9,12 +9,42 @@ import (
 	"github.com/claudemuller/daytime/pkg/daytime"
 )
 
-const port = 9999 // 13
+type Server struct {
+	Host string
+	Port int
+}
 
-// TODO: implement thread pool
+type Option func(*Server)
 
-func Listen() error {
-	ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+func WithPort(port int) Option {
+	return func(s *Server) {
+		s.Port = port
+	}
+}
+
+func WithHost(host string) Option {
+	return func(s *Server) {
+		if host != "" {
+			s.Host = host
+		}
+	}
+}
+
+func NewServer(options ...Option) *Server {
+	srv := &Server{
+		Host: "localhost",
+		Port: 13,
+	}
+	for _, option := range options {
+		option(srv)
+	}
+	return srv
+}
+
+func (s *Server) Listen() error {
+	log.Printf("Listening on %s:%d\n", s.Host, s.Port)
+
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port))
 	if err != nil {
 		return fmt.Errorf("failed to listen for connections: %w", err)
 	}
