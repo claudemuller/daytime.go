@@ -11,7 +11,7 @@ A TCP and UDP server implementation of the Daytime protocol (RFC867).
 ## Install Project Dependencies
 
 ```bash
-go mod tidy
+make tidy
 ```
 
 ## Run
@@ -25,19 +25,23 @@ go mod tidy
 | `--port/-port` | `int` | `13` | Elevated privileges are required to run on port `13` |
 
 ```bash
-go run cmd/main.go [--proto=[tcp/udp]]
+make run [ARGS=-proto=tcp -port=9999]
+
+# or
+make build
+./bin/daytime [-proto=tcp -port=9999]
 ```
 
 ## Build
 
 ```bash
-go build cmd/main.go
+make build
 ```
 
 ## Run tests
 
 ```bash
-go test ./...
+make test
 ```
 
 ## TODO
