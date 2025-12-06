@@ -2,7 +2,7 @@
 
 [![go](https://github.com/claudemuller/daytime.go/actions/workflows/go.yml/badge.svg)](https://github.com/claudemuller/daytime.go/actions/workflows/go.yml)
 
-A TCP and UDP server implementation of the Daytime protocol (RFC867).
+A TCP and UDP server implementation of the Daytime protocol ([RFC867](https://datatracker.ietf.org/doc/html/rfc867)).
 
 ## Requirements
 
