@@ -42,9 +42,6 @@ go test ./...
 
 ## TODO
 
-- create and return "server"
-    - handle control sequences
-    - a way to stop server
 - manage connections with goroutine pool
 - add integration test for the servers
 - load tests

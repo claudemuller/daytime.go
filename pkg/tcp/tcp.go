@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/claudemuller/daytime/pkg/daytime"
 )
 
 type TCPServer struct {
-	Host string
-	Port int
+	Host       string
+	Port       int
+	shutdownCh chan interface{}
+	wg         sync.WaitGroup
+	connMu     sync.Mutex
+	conns      map[net.Conn]interface{}
 }
 
 type Option func(*TCPServer)
@@ -33,8 +38,10 @@ func WithHost(host string) Option {
 
 func NewServer(options ...Option) *TCPServer {
 	srv := TCPServer{
-		Host: "localhost",
-		Port: 13,
+		Host:       "localhost",
+		Port:       13,
+		shutdownCh: make(chan interface{}),
+		conns:      make(map[net.Conn]interface{}),
 	}
 	for _, option := range options {
 		option(&srv)
@@ -43,7 +50,31 @@ func NewServer(options ...Option) *TCPServer {
 }
 
 func (s *TCPServer) Shutdown(ctx context.Context) error {
-	return nil
+	close(s.shutdownCh)
+
+	s.connMu.Lock()
+	{
+		for conn := range s.conns {
+			conn.Close()
+		}
+	}
+	s.connMu.Unlock()
+
+	doneCh := make(chan interface{})
+	go func() {
+		s.wg.Wait()
+		close(doneCh)
+	}()
+
+	select {
+	case <-doneCh:
+		slog.Info("Connections closed gracefully")
+		return nil
+
+	case <-ctx.Done():
+		slog.Warn("Shutdown timeout reached, closing open connections")
+		return ctx.Err()
+	}
 }
 
 func (s *TCPServer) Listen() error {
@@ -64,12 +95,26 @@ func (s *TCPServer) Listen() error {
 
 		slog.Info("Accepted connection", "source", conn.RemoteAddr())
 
-		go handle(conn)
+		s.wg.Add(1)
+		s.connMu.Lock()
+		{
+			s.conns[conn] = struct{}{}
+		}
+		s.connMu.Unlock()
+		go s.handle(conn)
 	}
 }
 
-func handle(conn net.Conn) {
-	defer conn.Close()
+func (s *TCPServer) handle(conn net.Conn) {
+	defer func(c net.Conn) {
+		c.Close()
+		s.connMu.Lock()
+		{
+			delete(s.conns, c)
+		}
+		s.connMu.Unlock()
+		s.wg.Done()
+	}(conn)
 
 	now := daytime.Get(time.Now)
 
