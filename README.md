@@ -33,3 +33,7 @@ go build cmd/main.go
 ```bash
 go test ./...
 ```
+
+## TODO
+
+- manage connections with goroutine pool
